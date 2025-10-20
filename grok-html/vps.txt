@@ -1,0 +1,542 @@
+# VPS Hosting Guide for Grok AI Interface
+
+This guide explains how to deploy the Grok AI Interface on a VPS (Virtual Private Server).
+
+## Prerequisites
+
+- A VPS with Linux (Ubuntu/Debian recommended)
+- SSH access to your VPS
+- Python 3.8 or higher installed on the VPS
+- Root or sudo access
+
+## Step 1: Connect to Your VPS
+
+Use SSH to connect to your VPS:
+```
+ssh user@your-vps-ip
+```
+
+## Step 2: Update System Packages
+
+Update your system packages:
+```
+sudo apt update && sudo apt upgrade -y
+```
+
+## Step 3: Install Python and pip
+
+If Python is not installed:
+```
+sudo apt install python3 python3-pip -y
+```
+
+Verify installation:
+```
+python3 --version
+pip3 --version
+```
+
+## Step 4: Upload Project Files
+
+You can upload files using SCP, SFTP, or by cloning from Git if you have a repository.
+
+Using SCP from your local machine:
+```
+scp -r /path/to/grok-html user@your-vps-ip:~/
+```
+
+Or if you have Git:
+```
+git clone https://github.com/your-repo/grok-html.git
+cd grok-html
+```
+
+## Step 5: Install Dependencies
+
+Navigate to the project directory and install Python dependencies:
+```
+cd grok-html
+pip3 install -r requirements.txt
+```
+
+## Step 6: Configure Firewall
+
+Open the port the application will use (default: 6969):
+```
+sudo ufw allow 6969
+sudo ufw enable
+```
+
+## Step 7: Run the Application
+
+### Option 1: Run Directly (for testing)
+```
+python3 api_server.py
+```
+
+### Option 2: Run with Screen (for background running)
+Install screen:
+```
+sudo apt install screen -y
+```
+
+Start screen session:
+```
+screen -S grok-ai
+python3 api_server.py
+```
+
+Detach from screen: Ctrl+A, then D
+
+Reattach later:
+```
+screen -r grok-ai
+```
+
+### Option 3: Run with systemd (recommended for production)
+
+Create a systemd service file:
+```
+sudo nano /etc/systemd/system/grok-ai.service
+```
+
+Add this content:
+```
+[Unit]
+Description=Grok AI Interface
+After=network.target
+
+[Service]
+Type=simple
+User=your-username
+WorkingDirectory=/path/to/grok-html
+ExecStart=/usr/bin/python3 api_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Replace `your-username` and `/path/to/grok-html` with actual values.
+
+Enable and start the service:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable grok-ai
+sudo systemctl start grok-ai
+```
+
+Check status:
+```
+sudo systemctl status grok-ai
+```
+
+## Step 8: Access the Application
+
+Once running, access your application at:
+```
+http://your-vps-ip:6969
+```
+
+## Step 9: Configure Domain (Optional)
+
+If you have a domain, you can set up a reverse proxy with Nginx:
+
+Install Nginx:
+```
+sudo apt install nginx -y
+```
+
+Create a site configuration:
+```
+sudo nano /etc/nginx/sites-available/grok-ai
+```
+
+Add:
+```
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:6969;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Enable the site:
+```
+sudo ln -s /etc/nginx/sites-available/grok-ai /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## Step 10: SSL Certificate (Optional)
+
+For HTTPS, install Certbot:
+```
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d your-domain.com
+```
+
+## Important Notes
+
+- The application requires proxy configuration for API access
+- Make sure your VPS has sufficient resources (RAM, CPU) for AI processing
+- Monitor logs: `sudo journalctl -u grok-ai -f` (for systemd)
+- For production, consider using a process manager like Gunicorn instead of uvicorn directly
+- Backup your data regularly
+- Keep dependencies updated: `pip3 install -r requirements.txt --upgrade`
+
+## Troubleshooting
+
+- If port 6969 is already in use: Change the port in api_server.py
+- Permission issues: Make sure the user running the app has access to the directory
+- Firewall blocking: Check `sudo ufw status`
+- Application not starting: Check logs for error messages
+
+## Troubleshooting Common Errors
+
+### Port Already in Use
+If you get "address already in use" error:
+```
+sudo lsof -i :6969
+sudo kill -9 <PID>
+```
+Or change the port in api_server.py
+
+### Permission Denied
+If you get permission errors:
+```
+sudo chown -R $USER:$USER /path/to/grok-html
+chmod +x api_server.py
+```
+
+### Missing Dependencies
+If imports fail:
+```
+pip3 install --upgrade -r requirements.txt
+```
+
+### Firewall Blocking Access
+Check firewall status:
+```
+sudo ufw status
+sudo ufw allow 6969
+```
+
+### Python Version Issues
+Check Python version:
+```
+python3 --version
+```
+Install Python 3.8+ if needed:
+```
+sudo apt install python3.8 python3.8-pip
+```
+
+### Memory/CPU Resource Issues
+Monitor resources:
+```
+htop
+free -h
+```
+Consider upgrading VPS plan for better performance
+
+### Network Connectivity Issues
+Test outbound connections:
+```
+curl -I https://x.ai
+```
+Ensure your VPS provider allows outbound HTTPS requests
+
+### Application Not Starting
+Check logs:
+```
+# For systemd
+sudo journalctl -u grok-ai -f
+
+# For screen
+screen -r grok-ai
+```
+
+### SSL Certificate Issues
+If HTTPS setup fails:
+```
+sudo certbot certificates
+sudo certbot delete --cert-name your-domain.com
+```
+
+### "Failed to Fetch" Errors
+If you get "Failed to fetch" errors in the browser:
+
+1. **Check if the backend is running:**
+   ```
+   sudo systemctl status grok-ai
+   # Or for screen: screen -r grok-ai
+   ```
+
+2. **Verify the API URL in index.html:**
+   Make sure the `API_BASE_URL` matches your VPS setup:
+   ```javascript
+   const API_BASE_URL = 'http://your-vps-ip:6969';
+   ```
+
+3. **Check CORS settings:**
+   The backend has CORS enabled for all origins, but if issues persist, verify the CORS middleware in api_server.py
+
+4. **Test API connectivity:**
+   ```
+   curl -X POST http://localhost:6969/ask \
+     -H "Content-Type: application/json" \
+     -d '{"proxy":"http://test:proxy@127.0.0.1:8080","message":"test","model":"grok-3-auto","ai_type":"grok"}'
+   ```
+
+5. **Firewall and port issues:**
+   ```
+   sudo ufw status
+   sudo netstat -tlnp | grep :6969
+   ```
+
+6. **Network connectivity from VPS:**
+   Test if the VPS can reach external APIs:
+   ```
+   curl -I https://x.ai
+   curl -I https://api.openai.com
+   ```
+
+7. **Check application logs:**
+   ```
+   sudo journalctl -u grok-ai -f --since "1 hour ago"
+   ```
+
+8. **Proxy configuration:**
+   Ensure your proxy settings are correct and the proxy server is accessible from the VPS
+
+9. **Browser cache:**
+   Clear browser cache or try incognito mode
+
+10. **Domain/DNS issues (if using domain):**
+    ```
+    nslookup your-domain.com
+    ping your-domain.com
+    ```
+
+### Environment Variable Issues
+If the application fails to start due to missing environment variables:
+```
+# Check if any env vars are needed
+grep -r "os.environ\|getenv" api_server.py
+# Set environment variables if required
+export API_KEY=your_key_here
+export DATABASE_URL=your_db_url
+```
+
+### Reverse Proxy Configuration Errors
+If using Nginx and getting 502 Bad Gateway:
+```
+# Check Nginx error logs
+sudo tail -f /var/log/nginx/error.log
+
+# Verify upstream server
+sudo nano /etc/nginx/sites-available/grok-ai
+# Ensure proxy_pass points to correct port
+
+# Test configuration
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### Memory Leaks or Application Crashes
+If the app crashes unexpectedly:
+```
+# Check system resources
+free -h
+top
+
+# Monitor application logs
+sudo journalctl -u grok-ai -f
+
+# Check for memory leaks in Python
+# Add memory profiling if needed
+pip3 install memory-profiler
+python3 -m memory_profiler api_server.py
+```
+
+### File Upload Issues
+If image uploads fail:
+```
+# Check file permissions
+ls -la /path/to/uploads/
+
+# Verify upload directory exists
+mkdir -p /path/to/uploads
+chmod 755 /path/to/uploads
+
+# Check file size limits in Nginx (if used)
+sudo nano /etc/nginx/nginx.conf
+# Add: client_max_body_size 10M;
+```
+
+### API Rate Limiting or Quota Issues
+If getting rate limit errors:
+```
+# Check API response headers for rate limits
+curl -I https://api.x.ai
+
+# Implement retry logic in the application
+# Add delays between requests
+```
+
+### Browser Compatibility Issues
+If the interface doesn't work in certain browsers:
+```
+# Check browser console for errors
+# Ensure modern JavaScript features are supported
+# Test with different browsers: Chrome, Firefox, Safari, Edge
+```
+
+### Mobile Responsiveness Issues
+If the UI doesn't display properly on mobile:
+```
+# Test with browser dev tools mobile view
+# Check CSS media queries
+# Verify viewport meta tag in index.html
+```
+
+### Session Management Issues
+If conversations aren't persisting:
+```
+# Check localStorage in browser dev tools
+# Verify JavaScript localStorage API is working
+# Clear browser data if corrupted
+```
+
+### Security Vulnerabilities
+If security warnings appear:
+```
+# Update all dependencies
+pip3 install --upgrade -r requirements.txt
+
+# Run security scans
+pip3 install safety
+safety check
+
+# Update system packages
+sudo apt update && sudo apt upgrade
+```
+
+### Performance Optimization Issues
+If the app is slow:
+```
+# Check server response times
+curl -o /dev/null -s -w "%{time_total}\n" http://localhost:6969
+
+# Optimize Python code
+# Use caching if needed
+# Consider using a CDN for static files
+```
+
+### Backup and Recovery Issues
+If data loss occurs:
+```
+# Set up automated backups
+crontab -e
+# Add: 0 2 * * * tar -czf /path/to/backup.tar.gz /path/to/grok-html
+
+# Test backup restoration
+tar -xzf /path/to/backup.tar.gz -C /tmp/
+```
+
+### Monitoring and Alerting Issues
+For production monitoring:
+```
+# Install monitoring tools
+sudo apt install htop iotop
+
+# Set up log rotation
+sudo nano /etc/logrotate.d/grok-ai
+# Add log rotation configuration
+
+# Monitor with systemd
+sudo systemctl status grok-ai
+```
+
+### Time Zone or Locale Issues
+If timestamps are wrong:
+```
+# Check system time zone
+timedatectl
+
+# Set correct time zone
+sudo timedatectl set-timezone America/New_York
+
+# Update locale if needed
+sudo locale-gen en_US.UTF-8
+sudo update-locale LANG=en_US.UTF-8
+```
+
+### Dependency Version Conflicts
+If import errors occur due to version mismatches:
+```
+# Check installed versions
+pip3 list
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip3 install -r requirements.txt
+
+# Update requirements.txt with specific versions
+pip3 freeze > requirements.txt
+```
+
+### Disk Space Issues
+If running out of disk space:
+```
+# Check disk usage
+df -h
+
+# Find large files
+du -h /path/to/grok-html | sort -hr | head -10
+
+# Clean up logs
+sudo journalctl --vacuum-time=7d
+```
+
+### Network Interface Issues
+If the app binds to wrong interface:
+```
+# Check network interfaces
+ip addr show
+
+# Specify bind address in api_server.py
+# Change: run("api_server:app", host="0.0.0.0", port=6969)
+# To: run("api_server:app", host="127.0.0.1", port=6969)
+```
+
+### SSL/TLS Handshake Errors
+If HTTPS connections fail:
+```
+# Check SSL certificate
+openssl s_client -connect your-domain.com:443
+
+# Renew certificates
+sudo certbot renew
+
+# Check certificate validity
+openssl x509 -in /etc/letsencrypt/live/your-domain.com/cert.pem -text
+```
+
+## Security Considerations
+
+- Use strong passwords for SSH
+- Keep system and Python packages updated
+- Consider using a VPN for additional security
+- Limit SSH access with key-based authentication
+- Regularly audit your VPS for vulnerabilities
